@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <link rel="modulepreload" href="{{asset "elm-setup.js"}}">
+    <link rel="modulepreload" href="{{asset "bundle.js"}}">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Concourse</title>
@@ -80,7 +80,7 @@
         featureFlags: {{ jsonMarshal .FeatureFlags }}
       };
     </script>
+    <script src="{{asset "bundle.js"}}" type="module"></script>
     <script src="{{asset "bundle.js"}}" nomodule></script>
-    <script src="{{asset "elm-setup.js"}}" type="module"></script>
   </body>
 </html>

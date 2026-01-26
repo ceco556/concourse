@@ -61,6 +61,7 @@
   position: fixed;
   bottom: 1em;
   right: 1em;
+  z-index: 0;
 }
 
 .lower-right-info td {
@@ -285,10 +286,135 @@ li.prep-status {
 }
 
 .pipeline-view {
+  .pipeline-content-row {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+    min-height: 0;
+  }
+
   .pipeline-content {
     position: relative;
     flex-grow: 1;
+    min-width: 0;
   }
+}
+
+.pipeline-editor {
+  position: relative;
+  z-index: 1;
+  width: 420px;
+  display: flex;
+  flex-direction: column;
+  background: @grey90;
+  border-left: 1px solid @grey80;
+}
+
+.pipeline-editor-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px;
+  border-bottom: 1px solid @grey80;
+}
+
+.pipeline-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pipeline-editor-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: @white;
+}
+
+.pipeline-editor-save {
+  background: transparent;
+  border: 0;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.pipeline-editor-save:hover {
+  background: @grey80;
+}
+
+.pipeline-editor-save:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.pipeline-editor-save:disabled {
+  background: transparent;
+  cursor: default;
+}
+
+.pipeline-editor-close {
+  background: transparent;
+  border: 0;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: @white;
+}
+
+.pipeline-editor-close::before {
+  content: '×';
+  display: block;
+  font-size: 24px;
+  line-height: 18px;
+}
+
+.pipeline-editor-close:hover {
+  background: @grey80;
+}
+
+.pipeline-editor-error {
+  padding: 10px;
+  border-bottom: 1px solid @grey80;
+  color: @failure40;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.pipeline-editor-toast {
+  position: absolute;
+  top: 60px;
+  left: 10px;
+  right: 10px;
+  padding: 8px 10px;
+  border-radius: 2px;
+  background: @success80;
+  border: 1px solid @success60;
+  color: @white;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pipeline-editor-textarea {
+  flex-grow: 1;
+  min-height: 0;
+  resize: none;
+  padding: 10px;
+  border: 0;
+  outline: 0;
+  background: @grey100;
+  color: @white;
+  font-family: 'Inconsolata', monospace;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .causality-view {

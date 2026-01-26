@@ -17,6 +17,8 @@ import Browser.Navigation as Navigation
 import Concourse exposing (DatabaseID, encodeJob, encodePipeline, encodeTeam)
 import Concourse.BuildStatus exposing (BuildStatus)
 import Concourse.Pagination exposing (Page)
+import Dict
+import Http
 import Json.Decode
 import Json.Encode
 import Maybe exposing (Maybe)
@@ -99,6 +101,9 @@ port scrollToId : ( String, String ) -> Cmd msg
 port getHostname : () -> Cmd msg
 
 
+port convertPipelineConfigToYaml : String -> Cmd msg
+
+
 type alias StickyHeaderConfig =
     { pageHeaderHeight : Float
     , pageBodyClass : String
@@ -134,6 +139,7 @@ type Effect
     | FetchResources Concourse.PipelineIdentifier
     | FetchBuildResources Concourse.BuildId
     | FetchPipeline Concourse.PipelineIdentifier
+    | FetchPipelineConfig Concourse.PipelineIdentifier
     | FetchPipelines String
     | FetchClusterInfo
     | FetchWall
@@ -178,6 +184,8 @@ type Effect
     | SendOrderPipelinesRequest Concourse.TeamName (List Concourse.PipelineName)
     | SendOrderPipelinesWithinGroupRequest Concourse.InstanceGroupIdentifier (List Concourse.InstanceVars)
     | SendLogOutRequest
+    | SavePipelineConfig Concourse.PipelineIdentifier Int String
+    | ConvertPipelineConfigToYaml String
     | GetScreenSize
     | PinTeamNames StickyHeaderConfig
     | Scroll ScrollDirection String
@@ -303,11 +311,48 @@ runEffect effect key csrfToken =
                 |> Api.request
                 |> Task.attempt PipelineFetched
 
+        FetchPipelineConfig id ->
+            let
+                getHeaderCI name headers =
+                    headers
+                        |> Dict.toList
+                        |> List.filter (\( k, _ ) -> String.toLower k == String.toLower name)
+                        |> List.head
+                        |> Maybe.map Tuple.second
+
+                parsePipelineConfigResponse response =
+                    case getHeaderCI "X-Concourse-Config-Version" response.headers |> Maybe.andThen String.toInt of
+                        Nothing ->
+                            Err "missing Config-Version header"
+
+                        Just version ->
+                            response.body
+                                |> Json.Decode.decodeString Concourse.decodePipelineConfig
+                                |> Result.mapError Json.Decode.errorToString
+                                |> Result.map (\config -> { config = config, version = version })
+
+                requestWithResponse =
+                    Api.get (Endpoints.PipelineConfig |> Endpoints.Pipeline id)
+            in
+            Api.expectStringResponse parsePipelineConfigResponse requestWithResponse
+                |> Api.request
+                |> Task.attempt PipelineConfigFetched
+
         FetchPipelines team ->
             Api.get (Endpoints.TeamPipelinesList |> Endpoints.Team team)
                 |> Api.expectJson (Json.Decode.list Concourse.decodePipeline)
                 |> Api.request
                 |> Task.attempt PipelinesFetched
+
+        SavePipelineConfig id version yaml ->
+            Api.put (Endpoints.PipelineConfig |> Endpoints.Pipeline id) csrfToken
+                |> (\r -> { r | headers = Http.header "X-Concourse-Config-Version" (String.fromInt version) :: r.headers })
+                |> Api.withYamlBody yaml
+                |> Api.request
+                |> Task.attempt (PipelineConfigSaved id)
+
+        ConvertPipelineConfigToYaml configJson ->
+            convertPipelineConfigToYaml configJson
 
         FetchAllResources ->
             Api.get Endpoints.ResourcesList
@@ -905,6 +950,9 @@ toHtmlID domId =
 
         TopBarPauseToggle _ ->
             "top-bar-pause-toggle"
+
+        TopBarEditPipeline ->
+            "top-bar-edit-pipeline"
 
         TopBarPinIcon ->
             "top-bar-pin-icon"

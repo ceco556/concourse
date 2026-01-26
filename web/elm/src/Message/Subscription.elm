@@ -60,6 +60,9 @@ port scrolledToId : (( String, String ) -> msg) -> Sub msg
 port gotHostname : (String -> msg) -> Sub msg
 
 
+port pipelineConfigYamlConverted : (String -> msg) -> Sub msg
+
+
 type alias Position =
     { x : Float
     , y : Float
@@ -92,6 +95,7 @@ type Subscription
     | OnCacheReceived
     | OnScrolledToId
     | OnHostnameReceived
+    | OnPipelineConfigYamlConverted
 
 
 type Delivery
@@ -116,6 +120,7 @@ type Delivery
     | FavoritedInstanceGroupsReceived (Result Json.Decode.Error (Set ( Concourse.TeamName, Concourse.PipelineName )))
     | ScrolledToId ( String, String )
     | GotHostname String
+    | PipelineConfigYamlConverted String
     | Noop
 
 
@@ -197,6 +202,9 @@ runSubscription s =
 
         OnHostnameReceived ->
             gotHostname GotHostname
+
+        OnPipelineConfigYamlConverted ->
+            pipelineConfigYamlConverted PipelineConfigYamlConverted
 
 
 decodePosition : Json.Decode.Decoder Position

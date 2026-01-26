@@ -40,6 +40,7 @@ module Concourse exposing
     , Pipeline
     , PipelineGroup
     , PipelineGrouping(..)
+    , PipelineConfig
     , PipelineIdentifier
     , PipelineName
     , Resource
@@ -68,6 +69,7 @@ module Concourse exposing
     , decodeJsonValue
     , decodeMetadata
     , decodePipeline
+    , decodePipelineConfig
     , decodeResource
     , decodeTeam
     , decodeUser
@@ -78,6 +80,7 @@ module Concourse exposing
     , emptyBuildResources
     , encodeBuild
     , encodeInstanceGroupId
+    , pipelineConfigToJsonString
     , encodeInstanceVars
     , encodeJob
     , encodeJsonValue
@@ -1208,6 +1211,20 @@ decodePipelineGroup =
         |> andMap (Json.Decode.field "name" Json.Decode.string)
         |> andMap (defaultTo [] <| Json.Decode.field "jobs" <| Json.Decode.list Json.Decode.string)
         |> andMap (defaultTo [] <| Json.Decode.field "resources" <| Json.Decode.list Json.Decode.string)
+
+
+type alias PipelineConfig =
+    Json.Decode.Value
+
+
+decodePipelineConfig : Json.Decode.Decoder PipelineConfig
+decodePipelineConfig =
+    Json.Decode.field "config" Json.Decode.value
+
+
+pipelineConfigToJsonString : PipelineConfig -> String
+pipelineConfigToJsonString config =
+    Json.Encode.encode 0 config
 
 
 type alias InstanceGroupIdentifier =

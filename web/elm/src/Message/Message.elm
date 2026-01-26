@@ -23,6 +23,7 @@ type Message
     | BlurMsg
       -- Pipeline
     | ToggleGroup Concourse.PipelineGroup
+    | EditPipelineYaml String
       -- Dashboard
     | DragStart Dashboard.Group.Models.Card
     | DragOver DropTarget
@@ -86,6 +87,9 @@ type DomID
     | PipelineCardPauseToggle PipelinesSection Concourse.DatabaseID
     | TopBarPipelineName Concourse.DatabaseID
     | TopBarPinIcon
+    | TopBarEditPipeline
+    | PipelineEditorClose
+    | PipelineEditorSave
     | TopBarFavoritedIcon Concourse.DatabaseID
     | TopBarPauseToggle Concourse.PipelineIdentifier
     | VisibilityButton PipelinesSection Concourse.DatabaseID

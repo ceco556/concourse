@@ -1,5 +1,88 @@
+import * as jsyaml from 'js-yaml';
+
 const renderingModulePromise = import('./index.mjs');
 const causalityModulePromise = import('./causality.mjs');
+
+function orderKeys(parentKey, keys) {
+  const prioritize = (wanted) => wanted.filter((k) => keys.includes(k));
+
+  if (parentKey === 'jobs') {
+    const ordered = [...prioritize(['name', 'plan'])];
+    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
+  }
+
+  if (
+    parentKey === 'plan' ||
+    parentKey === 'on_success' ||
+    parentKey === 'on_failure' ||
+    parentKey === 'on_abort' ||
+    parentKey === 'on_error' ||
+    parentKey === 'ensure'
+  ) {
+    const ordered = [
+      ...prioritize([
+        'task',
+        'get',
+        'put',
+        'set_pipeline',
+        'load_var',
+        'try',
+        'do',
+        'in_parallel',
+        'across',
+        'timeout',
+        'attempts',
+        'config',
+      ]),
+    ];
+    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
+  }
+
+  if (parentKey === 'config') {
+    const ordered = [...prioritize(['platform', 'image_resource', 'rootfs_uri', 'params', 'run'])];
+    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
+  }
+
+  if (parentKey === 'image_resource') {
+    const ordered = [...prioritize(['type', 'source', 'params', 'version', 'tag'])];
+    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
+  }
+
+  if (parentKey === 'run') {
+    const ordered = [...prioritize(['path', 'args', 'dir', 'user'])];
+    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
+  }
+
+  return keys;
+}
+
+function shouldOmitKey(parentKey, key, value) {
+  if (parentKey === 'image_resource' && key === 'name' && value === '') return true;
+  return false;
+}
+
+function normalizeForYaml(value, parentKey) {
+  if (Array.isArray(value)) {
+    return value.map((v) => normalizeForYaml(v, parentKey));
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const keys = orderKeys(parentKey, Object.keys(value)).filter(
+      (k) => !shouldOmitKey(parentKey, k, value[k])
+    );
+    const out = {};
+    for (const key of keys) {
+      out[key] = normalizeForYaml(value[key], key);
+    }
+    return out;
+  }
+
+  return value;
+}
+
+function postprocessYaml(yamlText) {
+  return yamlText.replace(/(^\s*-\s+)["'](-[A-Za-z0-9_.-]+)["']\s*$/gm, '$1$2');
+}
 
 const node = document.getElementById("elm-app-embed");
 if (node === null) {
@@ -9,6 +92,54 @@ if (node === null) {
 const app = Elm.Main.init({
   node: node,
   flags: window.elmFlags,
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Tab') {
+    return;
+  }
+
+  const target = e.target;
+  if (!(target instanceof HTMLTextAreaElement)) {
+    return;
+  }
+
+  if (!target.classList.contains('pipeline-editor-textarea')) {
+    return;
+  }
+
+  e.preventDefault();
+
+  const start = target.selectionStart || 0;
+  const end = target.selectionEnd || 0;
+  const value = target.value || '';
+  const insert = '  ';
+
+  target.value = value.slice(0, start) + insert + value.slice(end);
+
+  const newPos = start + insert.length;
+  target.selectionStart = newPos;
+  target.selectionEnd = newPos;
+
+  target.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
+app.ports.convertPipelineConfigToYaml.subscribe(function(configJson) {
+  try {
+    const obj = JSON.parse(configJson);
+    const normalized = normalizeForYaml(obj, null);
+    const dumped = jsyaml.dump(normalized, {
+      noRefs: true,
+      lineWidth: -1,
+      sortKeys: false,
+      quotingType: '"',
+    });
+    const yamlText = postprocessYaml(dumped);
+    app.ports.pipelineConfigYamlConverted.send(yamlText);
+  } catch (err) {
+    console.error(err);
+    app.ports.pipelineConfigYamlConverted.send('');
+  }
 });
 
 var resizeTimer;

@@ -1,6 +1,7 @@
 module Api exposing
     ( Request
     , expectJson
+    , expectStringResponse
     , get
     , ignoreResponse
     , paginatedGet
@@ -8,6 +9,7 @@ module Api exposing
     , put
     , request
     , withJsonBody
+    , withYamlBody
     )
 
 import Api.Endpoints exposing (Endpoint, toString)
@@ -100,9 +102,25 @@ expectJson decoder r =
     }
 
 
+expectStringResponse : (Http.Response String -> Result String b) -> Request a -> Request b
+expectStringResponse parseResponse r =
+    { method = r.method
+    , headers = r.headers
+    , endpoint = r.endpoint
+    , query = r.query
+    , body = r.body
+    , expect = Http.expectStringResponse parseResponse
+    }
+
+
 withJsonBody : Json.Encode.Value -> Request a -> Request a
 withJsonBody value r =
     { r | body = Http.jsonBody value }
+
+
+withYamlBody : String -> Request a -> Request a
+withYamlBody yaml r =
+    { r | body = Http.stringBody "application/x-yaml" yaml }
 
 
 ignoreResponse : Http.Expect ()

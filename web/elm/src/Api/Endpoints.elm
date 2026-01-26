@@ -41,6 +41,7 @@ type PipelineEndpoint
     | UnpausePipeline
     | ExposePipeline
     | HidePipeline
+    | PipelineConfig
     | PipelineJobsList
     | PipelineResourcesList
 
@@ -213,6 +214,9 @@ pipelineEndpoint endpoint =
 
         HidePipeline ->
             [ "hide" ]
+
+        PipelineConfig ->
+            [ "config" ]
 
         PipelineJobsList ->
             [ "jobs" ]

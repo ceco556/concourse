@@ -1,11 +1,14 @@
 module Pipeline.Styles exposing
     ( consoleIcon
     , docsIcon
+    , editButton
+    , editButtonIcon
     , favoritedIcon
     , groupItem
     , groupsBar
     , pauseToggle
     , pipelineBackground
+    , setPipelineIcon
     )
 
 import Assets
@@ -74,6 +77,22 @@ pauseToggle =
     ]
 
 
+editButton : List (Html.Attribute msg)
+editButton =
+    [ style "border-left" <|
+        "1px solid "
+            ++ Colors.background
+    , style "background-color" Colors.topBarBackground
+    ]
+
+
+editButtonIcon : List (Html.Attribute msg)
+editButtonIcon =
+    [ style "margin" "17px"
+    , style "cursor" "pointer"
+    ]
+
+
 docsIcon : List (Html.Attribute msg)
 docsIcon =
     [ style "margin-right" "5px"
@@ -97,6 +116,20 @@ consoleIcon =
     , style "background-image" <|
         Assets.backgroundImage <|
             Just Assets.Console
+    , style "background-repeat" "no-repeat"
+    , style "background-position" "50% 50%"
+    , style "background-size" "contain"
+    , style "display" "inline-block"
+    ]
+
+
+setPipelineIcon : List (Html.Attribute msg)
+setPipelineIcon =
+    [ style "width" "16px"
+    , style "height" "16px"
+    , style "background-image" <|
+        Assets.backgroundImage <|
+            Just Assets.CheckmarkIcon
     , style "background-repeat" "no-repeat"
     , style "background-position" "50% 50%"
     , style "background-size" "contain"

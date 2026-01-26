@@ -14,6 +14,7 @@ module Pipeline.Pipeline exposing
     )
 
 import Application.Models exposing (Session)
+import Assets
 import Colors
 import Concourse
 import Concourse.BuildStatus exposing (BuildStatus(..))
@@ -37,7 +38,7 @@ import Http
 import Keyboard
 import Login.Login as Login
 import Message.Callback exposing (Callback(..))
-import Message.Effects exposing (Effect(..))
+import Message.Effects exposing (Effect(..), toHtmlID)
 import Message.Message exposing (DomID(..), Message(..), PipelinesSection(..))
 import Message.Subscription
     exposing
@@ -58,6 +59,7 @@ import Time
 import Tooltip
 import UpdateMsg exposing (UpdateMsg)
 import Views.FavoritedIcon as FavoritedIcon
+import Views.Icon as Icon
 import Views.PauseToggle as PauseToggle
 import Views.Styles
 import Views.TopBar as TopBar
@@ -65,21 +67,29 @@ import Views.TopBar as TopBar
 
 type alias Model =
     Login.Model
-        { pipelineLocator : Concourse.PipelineIdentifier
+        { turbulenceImgSrc : String
+        , pipelineLocator : Concourse.PipelineIdentifier
         , pipeline : WebData Concourse.Pipeline
         , fetchedJobs : Maybe (List Concourse.Job)
         , fetchedResources : Maybe (List Concourse.Resource)
         , renderedJobs : Maybe (List Concourse.Job)
         , renderedResources : Maybe (List Concourse.Resource)
-        , turbulenceImgSrc : String
         , experiencingTurbulence : Bool
-        , selectedGroups : List String
         , hideLegend : Bool
         , hideLegendCounter : Float
         , isToggleLoading : Bool
+        , selectedGroups : List String
+        , isUserMenuExpanded : Bool
         , pinMenuExpanded : Bool
+        , isEditorOpen : Bool
+        , editorText : String
+        , editorLoading : Bool
+        , editorSaving : Bool
+        , editorError : Maybe String
+        , editorConfigVersion : Maybe Int
+        , editorShouldUpdateTextFromFetch : Bool
+        , editorSuccessToastSeconds : Int
         }
-
 
 type alias Flags =
     { pipelineLocator : Concourse.PipelineIdentifier
@@ -106,6 +116,14 @@ init flags =
             , selectedGroups = flags.selectedGroups
             , isUserMenuExpanded = False
             , pinMenuExpanded = False
+            , isEditorOpen = False
+            , editorText = ""
+            , editorLoading = False
+            , editorSaving = False
+            , editorError = Nothing
+            , editorConfigVersion = Nothing
+            , editorShouldUpdateTextFromFetch = True
+            , editorSuccessToastSeconds = 0
             }
     in
     ( model
@@ -221,6 +239,77 @@ handleCallback callback ( model, effects ) =
         PipelineToggled _ (Err _) ->
             ( { model | isToggleLoading = False }, effects )
 
+        PipelineConfigFetched (Ok payload) ->
+            if model.editorShouldUpdateTextFromFetch then
+                ( { model
+                    | editorLoading = False
+                    , editorError = Nothing
+                    , editorConfigVersion = Just payload.version
+                  }
+                , effects
+                    ++ [ ConvertPipelineConfigToYaml <| Concourse.pipelineConfigToJsonString payload.config ]
+                )
+
+            else
+                ( { model
+                    | editorLoading = False
+                    , editorError = Nothing
+                    , editorConfigVersion = Just payload.version
+                    , editorShouldUpdateTextFromFetch = True
+                  }
+                , effects
+                )
+
+        PipelineConfigFetched (Err err) ->
+            ( { model
+                | editorLoading = False
+                , editorError =
+                    Just <|
+                        case err of
+                            Http.BadStatus { body } ->
+                                body
+
+                            Http.BadPayload body _ ->
+                                body
+
+                            _ ->
+                                "failed to load pipeline config"
+              }
+            , effects
+            )
+
+        PipelineConfigSaved _ (Ok ()) ->
+            ( { model
+                | editorSaving = False
+                , editorError = Nothing
+                , editorShouldUpdateTextFromFetch = False
+                                , editorSuccessToastSeconds = 3
+              }
+            , effects
+                ++ [ FetchPipeline model.pipelineLocator
+                   , FetchPipelineConfig model.pipelineLocator
+                   ]
+            )
+
+        PipelineConfigSaved _ (Err err) ->
+            ( { model
+                | editorSaving = False
+                , editorSuccessToastSeconds = 0
+                , editorError =
+                    Just <|
+                        case err of
+                            Http.BadStatus { body } ->
+                                body
+
+                            Http.BadPayload body _ ->
+                                body
+
+                            _ ->
+                                "failed to save pipeline config"
+              }
+            , effects
+            )
+
         JobsFetched (Ok fetchedJobs) ->
             renderIfNeeded
                 ( { model
@@ -287,6 +376,11 @@ handleCallback callback ( model, effects ) =
 handleDelivery : Delivery -> ET Model
 handleDelivery delivery ( model, effects ) =
     case delivery of
+        PipelineConfigYamlConverted yaml ->
+            ( { model | editorText = yaml, editorError = Nothing }
+            , effects
+            )
+
         KeyDown keyEvent ->
             ( { model | hideLegend = False, hideLegendCounter = 0 }
             , if keyEvent.code == Keyboard.F then
@@ -300,13 +394,24 @@ handleDelivery delivery ( model, effects ) =
             ( { model | hideLegend = False, hideLegendCounter = 0 }, effects )
 
         ClockTicked OneSecond _ ->
-            if model.hideLegendCounter + timeUntilHiddenCheckInterval > timeUntilHidden then
-                ( { model | hideLegend = True }, effects )
+            let
+                modelWithLegendHidden =
+                    if model.hideLegendCounter + timeUntilHiddenCheckInterval > timeUntilHidden then
+                        { model | hideLegend = True }
 
-            else
-                ( { model | hideLegendCounter = model.hideLegendCounter + timeUntilHiddenCheckInterval }
-                , effects
-                )
+                    else
+                        { model | hideLegendCounter = model.hideLegendCounter + timeUntilHiddenCheckInterval }
+
+                toastSeconds =
+                    if modelWithLegendHidden.editorSuccessToastSeconds > 0 then
+                        modelWithLegendHidden.editorSuccessToastSeconds - 1
+
+                    else
+                        0
+            in
+            ( { modelWithLegendHidden | editorSuccessToastSeconds = toastSeconds }
+            , effects
+            )
 
         ClockTicked FiveSeconds _ ->
             ( model
@@ -334,6 +439,49 @@ update msg ( model, effects ) =
                             (toggleGroup group model.selectedGroups model.pipeline)
                             model
                    ]
+            )
+
+        Click TopBarEditPipeline ->
+            if model.isEditorOpen then
+                ( { model | isEditorOpen = False, editorError = Nothing }
+                , effects
+                )
+
+            else
+                ( { model
+                    | isEditorOpen = True
+                    , editorLoading = True
+                    , editorError = Nothing
+                    , editorConfigVersion = Nothing
+                    , editorShouldUpdateTextFromFetch = True
+                  }
+                , effects ++ [ FetchPipelineConfig model.pipelineLocator ]
+                )
+
+        Click PipelineEditorClose ->
+            ( { model | isEditorOpen = False, editorError = Nothing }
+            , effects
+            )
+
+        Click PipelineEditorSave ->
+            if model.editorSaving then
+                ( model, effects )
+
+            else
+                case model.editorConfigVersion of
+                    Nothing ->
+                        ( { model | editorError = Just "pipeline config not loaded" }
+                        , effects
+                        )
+
+                    Just version ->
+                        ( { model | editorSaving = True, editorError = Nothing }
+                        , effects ++ [ SavePipelineConfig model.pipelineLocator version (sanitizeYamlIndentation model.editorText) ]
+                        )
+
+        EditPipelineYaml yaml ->
+            ( { model | editorText = yaml }
+            , effects
             )
 
         Click (TopBarPauseToggle pipelineIdentifier) ->
@@ -365,6 +513,7 @@ subscriptions =
     , OnMouse
     , OnKeyDown
     , OnWindowResize
+    , OnPipelineConfigYamlConverted
     ]
 
 
@@ -404,6 +553,29 @@ view session model =
                                 , timeZone = session.timeZone
                                 }
                        , PinMenu.viewPinMenu session model
+                       , Html.div
+                            Styles.editButton
+                            [ Html.div
+                                (Styles.editButtonIcon
+                                    ++ [ StrictEvents.onLeftClick <| Click TopBarEditPipeline
+                                       , onMouseEnter <| Hover <| Just TopBarEditPipeline
+                                       , onMouseLeave <| Hover Nothing
+                                       , id (toHtmlID TopBarEditPipeline)
+                                       ]
+                                )
+                                [ Icon.icon
+                                    { sizePx = 20
+                                    , image = Assets.PencilIcon
+                                    }
+                                    [ style "opacity" <|
+                                        if HoverState.isHovered TopBarEditPipeline session.hovered || model.isEditorOpen then
+                                            "1"
+
+                                        else
+                                            "0.7"
+                                    ]
+                                ]
+                            ]
                        , Html.div
                             Styles.favoritedIcon
                             [ FavoritedIcon.view
@@ -483,6 +655,14 @@ tooltip model session =
 
                         else
                             "favorite pipeline"
+                , attachPosition = { direction = Tooltip.Bottom, alignment = Tooltip.End }
+                , arrow = Just 5
+                , containerAttrs = Nothing
+                }
+
+        HoverState.Tooltip TopBarEditPipeline _ ->
+            Just
+                { body = Html.text "edit pipeline"
                 , attachPosition = { direction = Tooltip.Bottom, alignment = Tooltip.End }
                 , arrow = Just 5
                 , containerAttrs = Nothing
@@ -586,98 +766,199 @@ viewSubPage session model =
         ]
         [ viewGroupsBar session model
         , Html.div
-            [ class "pipeline-content" ]
+            [ class "pipeline-content-row" ]
             [ Html.div
-                (id "pipeline-background" :: backgroundImage model.pipeline)
-                []
-            , Svg.svg
-                [ SvgAttributes.class "pipeline-graph test" ]
-                []
-            , Html.div
-                [ if model.experiencingTurbulence then
-                    class "error-message"
+                [ class "pipeline-content" ]
+                [ Html.div
+                    (id "pipeline-background" :: backgroundImage model.pipeline)
+                    []
+                , Svg.svg
+                    [ SvgAttributes.class "pipeline-graph test" ]
+                    []
+                , Html.div
+                    [ if model.experiencingTurbulence then
+                        class "error-message"
+
+                      else
+                        class "error-message hidden"
+                    ]
+                    [ Html.div [ class "message" ]
+                        [ Html.img [ src model.turbulenceImgSrc, class "seatbelt" ] []
+                        , Html.p [] [ Html.text "experiencing turbulence" ]
+                        , Html.p [ class "explanation" ] []
+                        ]
+                    ]
+                , if model.hideLegend then
+                    Html.text ""
 
                   else
-                    class "error-message hidden"
-                ]
-                [ Html.div [ class "message" ]
-                    [ Html.img [ src model.turbulenceImgSrc, class "seatbelt" ] []
-                    , Html.p [] [ Html.text "experiencing turbulence" ]
-                    , Html.p [ class "explanation" ] []
+                    Html.dl
+                        [ id "legend", class "legend" ]
+                        [ Html.dt [ class "succeeded" ] []
+                        , Html.dd [] [ Html.text "succeeded" ]
+                        , Html.dt [ class "errored" ] []
+                        , Html.dd [] [ Html.text "errored" ]
+                        , Html.dt [ class "aborted" ] []
+                        , Html.dd [] [ Html.text "aborted" ]
+                        , Html.dt [ class "paused" ] []
+                        , Html.dd [] [ Html.text "paused" ]
+                        , Html.dt
+                            [ Html.Attributes.style "background-color" Colors.pinned
+                            ]
+                            []
+                        , Html.dd [] [ Html.text "pinned" ]
+                        , Html.dt [ class "failed" ] []
+                        , Html.dd [] [ Html.text "failed" ]
+                        , Html.dt [ class "pending" ] []
+                        , Html.dd [] [ Html.text "pending" ]
+                        , Html.dt [ class "started" ] []
+                        , Html.dd [] [ Html.text "started" ]
+                        , Html.dt [ class "dotted" ] [ Html.text "." ]
+                        , Html.dd [] [ Html.text "dependency" ]
+                        , Html.dt [ class "solid" ] [ Html.text "-" ]
+                        , Html.dd [] [ Html.text "dependency (trigger)" ]
+                        ]
+                , Html.table [ class "lower-right-info" ]
+                    [ Html.tr []
+                        [ Html.td [ class "label" ]
+                            [ Html.a
+                                [ href "https://concourse-ci.org/docs.html"
+                                , target "_blank"
+                                , rel "noopener noreferrer"
+                                , style "align-items" "center"
+                                , style "justify-content" "right"
+                                , style "display" "flex"
+                                ]
+                                [ Html.div Styles.docsIcon []
+                                , Html.text "Docs"
+                                ]
+                            ]
+                        ]
+                    , Html.tr []
+                        [ Html.td [ class "label" ]
+                            [ Html.a
+                                [ href "/download-fly"
+                                , target "_self"
+                                , style "align-items" "center"
+                                , style "justify-content" "right"
+                                , style "display" "flex"
+                                ]
+                                [ Html.div Styles.consoleIcon []
+                                , Html.text "Download fly CLI"
+                                ]
+                            ]
+                        ]
+                    , Html.tr []
+                        [ Html.td [ class "label" ]
+                            [ Html.text "version: "
+                            , Html.text "v"
+                            , Html.span
+                                [ class "number" ]
+                                [ Html.text session.version ]
+                            ]
+                        ]
                     ]
                 ]
-            , if model.hideLegend then
-                Html.text ""
+            , if model.isEditorOpen then
+                viewEditorPanel model
 
               else
-                Html.dl
-                    [ id "legend", class "legend" ]
-                    [ Html.dt [ class "succeeded" ] []
-                    , Html.dd [] [ Html.text "succeeded" ]
-                    , Html.dt [ class "errored" ] []
-                    , Html.dd [] [ Html.text "errored" ]
-                    , Html.dt [ class "aborted" ] []
-                    , Html.dd [] [ Html.text "aborted" ]
-                    , Html.dt [ class "paused" ] []
-                    , Html.dd [] [ Html.text "paused" ]
-                    , Html.dt
-                        [ Html.Attributes.style "background-color" Colors.pinned
-                        ]
-                        []
-                    , Html.dd [] [ Html.text "pinned" ]
-                    , Html.dt [ class "failed" ] []
-                    , Html.dd [] [ Html.text "failed" ]
-                    , Html.dt [ class "pending" ] []
-                    , Html.dd [] [ Html.text "pending" ]
-                    , Html.dt [ class "started" ] []
-                    , Html.dd [] [ Html.text "started" ]
-                    , Html.dt [ class "dotted" ] [ Html.text "." ]
-                    , Html.dd [] [ Html.text "dependency" ]
-                    , Html.dt [ class "solid" ] [ Html.text "-" ]
-                    , Html.dd [] [ Html.text "dependency (trigger)" ]
-                    ]
-            , Html.table [ class "lower-right-info" ]
-                [ Html.tr []
-                    [ Html.td [ class "label" ]
-                        [ Html.a
-                            [ href "https://concourse-ci.org/docs.html"
-                            , target "_blank"
-                            , rel "noopener noreferrer"
-                            , style "align-items" "center"
-                            , style "justify-content" "right"
-                            , style "display" "flex"
-                            ]
-                            [ Html.div Styles.docsIcon []
-                            , Html.text "Docs"
-                            ]
-                        ]
-                    ]
-                , Html.tr []
-                    [ Html.td [ class "label" ]
-                        [ Html.a
-                            [ href "/download-fly"
-                            , target "_self"
-                            , style "align-items" "center"
-                            , style "justify-content" "right"
-                            , style "display" "flex"
-                            ]
-                            [ Html.div Styles.consoleIcon []
-                            , Html.text "Download fly CLI"
-                            ]
-                        ]
-                    ]
-                , Html.tr []
-                    [ Html.td [ class "label" ]
-                        [ Html.text "version: "
-                        , Html.text "v"
-                        , Html.span
-                            [ class "number" ]
-                            [ Html.text session.version ]
-                        ]
-                    ]
-                ]
+                Html.text ""
             ]
         ]
+
+
+viewEditorPanel : Model -> Html Message
+viewEditorPanel model =
+    Html.div
+        [ class "pipeline-editor" ]
+        [ Html.div
+            [ class "pipeline-editor-header" ]
+            [ Html.h3 [ class "pipeline-editor-title" ] [ Html.text "Edit pipeline" ]
+            , Html.div
+                [ class "pipeline-editor-actions" ]
+                [ Html.button
+                    [ class "pipeline-editor-save"
+                    , Html.Attributes.title "Set pipeline"
+                    , Html.Attributes.attribute "aria-label" "Set pipeline"
+                    , StrictEvents.onLeftClick <| Click PipelineEditorSave
+                    , Html.Attributes.disabled (model.editorLoading || model.editorSaving || model.editorConfigVersion == Nothing)
+                    ]
+                    [ Html.div Styles.setPipelineIcon [] ]
+                , Html.button
+                    [ class "pipeline-editor-close"
+                    , Html.Attributes.title "Close"
+                    , Html.Attributes.attribute "aria-label" "Close"
+                    , StrictEvents.onLeftClick <| Click PipelineEditorClose
+                    ]
+                    []
+                ]
+            ]
+        , if model.editorSuccessToastSeconds > 0 then
+            Html.div [ class "pipeline-editor-toast" ] [ Html.text "Pipeline set successfully" ]
+
+          else
+            Html.text ""
+        , case model.editorError of
+            Just err ->
+                Html.div [ class "pipeline-editor-error" ] [ Html.text err ]
+
+            Nothing ->
+                Html.text ""
+        , Html.textarea
+            [ class "pipeline-editor-textarea"
+            , Html.Attributes.value model.editorText
+            , Html.Events.onInput EditPipelineYaml
+            , Html.Attributes.spellcheck False
+            , Html.Attributes.disabled model.editorLoading
+            ]
+            []
+        ]
+
+
+sanitizeYamlIndentation : String -> String
+sanitizeYamlIndentation yamlText =
+    yamlText
+        |> String.split "\n"
+        |> List.map sanitizeYamlIndentationLine
+        |> String.join "\n"
+
+
+sanitizeYamlIndentationLine : String -> String
+sanitizeYamlIndentationLine line =
+    let
+        ( indentChars, restChars ) =
+            splitIndentChars (String.toList line) []
+
+        indent =
+            indentChars
+                |> List.reverse
+                |> List.foldl
+                    (\c acc ->
+                        if c == '\t' then
+                            acc ++ "  "
+
+                        else
+                            acc ++ " "
+                    )
+                    ""
+    in
+    indent ++ String.fromList restChars
+
+
+splitIndentChars : List Char -> List Char -> ( List Char, List Char )
+splitIndentChars remaining indentAcc =
+    case remaining of
+        [] ->
+            ( indentAcc, [] )
+
+        c :: rest ->
+            if c == ' ' || c == '\t' then
+                splitIndentChars rest (c :: indentAcc)
+
+            else
+                ( indentAcc, remaining )
+
 
 
 viewGroupsBar : { a | hovered : HoverState.HoverState } -> Model -> Html Message

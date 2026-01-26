@@ -28,6 +28,8 @@ type Callback
     | JobFetched (Fetched Concourse.Job)
     | JobsFetched (Fetched (List Concourse.Job))
     | PipelineFetched (Fetched Concourse.Pipeline)
+    | PipelineConfigFetched (Fetched { config : Concourse.PipelineConfig, version : Int })
+    | PipelineConfigSaved Concourse.PipelineIdentifier (Fetched ())
     | PipelinesFetched (Fetched (List Concourse.Pipeline))
     | PipelineToggled Concourse.PipelineIdentifier (Fetched ())
     | PipelinesOrdered Concourse.TeamName (Fetched ())
