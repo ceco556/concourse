@@ -22,6 +22,7 @@ module Concourse exposing
     , CausalityResource
     , CausalityResourceVersion
     , ClusterInfo
+    , ConfigWarning
     , DatabaseID
     , FeatureFlags
     , HookedPlan
@@ -52,6 +53,7 @@ module Concourse exposing
     , VersionedResource
     , VersionedResourceIdentifier
     , Wall
+    , SaveConfigResponse
     , csrfTokenHeaderName
     , customDecoder
     , decodeAcrossSubstep
@@ -62,6 +64,7 @@ module Concourse exposing
     , decodeBuildPrep
     , decodeBuildResources
     , decodeCausality
+    , decodeConfigWarning
     , decodeInfo
     , decodeInstanceGroupId
     , decodeInstanceVars
@@ -71,6 +74,7 @@ module Concourse exposing
     , decodePipeline
     , decodePipelineConfig
     , decodeResource
+    , decodeSaveConfigResponse
     , decodeTeam
     , decodeUser
     , decodeVersion
@@ -112,6 +116,35 @@ import Json.Encode
 import Json.Encode.Extra
 import List.Extra
 import Time
+
+type alias ConfigWarning =
+    { warningType : String
+    , message : String
+    }
+
+
+type alias SaveConfigResponse =
+    List ConfigWarning
+
+
+decodeConfigWarning : Json.Decode.Decoder ConfigWarning
+decodeConfigWarning =
+    Json.Decode.map2
+        (\warningType message ->
+            { warningType = warningType
+            , message = message
+            }
+        )
+        (Json.Decode.field "type" Json.Decode.string)
+        (Json.Decode.field "message" Json.Decode.string)
+
+
+decodeSaveConfigResponse : Json.Decode.Decoder SaveConfigResponse
+decodeSaveConfigResponse =
+    Json.Decode.oneOf
+        [ Json.Decode.field "warnings" (Json.Decode.list decodeConfigWarning)
+        , Json.Decode.succeed []
+        ]
 
 
 

@@ -348,6 +348,7 @@ runEffect effect key csrfToken =
             Api.put (Endpoints.PipelineConfig |> Endpoints.Pipeline id) csrfToken
                 |> (\r -> { r | headers = Http.header "X-Concourse-Config-Version" (String.fromInt version) :: r.headers })
                 |> Api.withYamlBody yaml
+                |> Api.expectJson Concourse.decodeSaveConfigResponse
                 |> Api.request
                 |> Task.attempt (PipelineConfigSaved id)
 

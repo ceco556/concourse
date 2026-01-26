@@ -85,6 +85,7 @@ type alias Model =
         , editorLoading : Bool
         , editorSaving : Bool
         , editorError : Maybe String
+        , editorWarnings : List Concourse.ConfigWarning
         , editorConfigVersion : Maybe Int
         , editorShouldUpdateTextFromFetch : Bool
         , editorSuccessToastSeconds : Int
@@ -120,6 +121,7 @@ init flags =
             , editorLoading = False
             , editorSaving = False
             , editorError = Nothing
+            , editorWarnings = []
             , editorConfigVersion = Nothing
             , editorShouldUpdateTextFromFetch = True
             , editorSuccessToastSeconds = 0
@@ -262,6 +264,7 @@ handleCallback callback ( model, effects ) =
         PipelineConfigFetched (Err err) ->
             ( { model
                 | editorLoading = False
+                , editorWarnings = []
                 , editorError =
                     Just <|
                         case err of
@@ -277,10 +280,11 @@ handleCallback callback ( model, effects ) =
             , effects
             )
 
-        PipelineConfigSaved _ (Ok ()) ->
+        PipelineConfigSaved _ (Ok warnings) ->
             ( { model
                 | editorSaving = False
                 , editorError = Nothing
+            , editorWarnings = warnings
                 , editorShouldUpdateTextFromFetch = False
                 , editorSuccessToastSeconds = 3
               }
@@ -294,6 +298,7 @@ handleCallback callback ( model, effects ) =
             ( { model
                 | editorSaving = False
                 , editorSuccessToastSeconds = 0
+                , editorWarnings = []
                 , editorError =
                     Just <|
                         case err of
@@ -451,6 +456,7 @@ update msg ( model, effects ) =
                     | isEditorOpen = True
                     , editorLoading = True
                     , editorError = Nothing
+                    , editorWarnings = []
                     , editorConfigVersion = Nothing
                     , editorShouldUpdateTextFromFetch = True
                   }
@@ -474,7 +480,7 @@ update msg ( model, effects ) =
                         )
 
                     Just version ->
-                        ( { model | editorSaving = True, editorError = Nothing }
+                        ( { model | editorSaving = True, editorError = Nothing, editorWarnings = [] }
                         , effects ++ [ SavePipelineConfig model.pipelineLocator version (sanitizeYamlIndentation model.editorText) ]
                         )
 
@@ -891,6 +897,21 @@ viewEditorPanel model =
                     []
                 ]
             ]
+        , if List.isEmpty model.editorWarnings then
+            Html.text ""
+
+          else
+            Html.div
+                [ class "pipeline-editor-warnings" ]
+                [ Html.text
+                    ("Warnings:\n"
+                        ++ (model.editorWarnings
+                                |> List.map .message
+                                |> List.map (\msg -> "- " ++ msg)
+                                |> String.join "\n"
+                           )
+                    )
+                ]
         , if model.editorSuccessToastSeconds > 0 then
             Html.div [ class "pipeline-editor-toast" ] [ Html.text "Pipeline set successfully" ]
 
