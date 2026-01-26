@@ -38,7 +38,7 @@ import Http
 import Keyboard
 import Login.Login as Login
 import Message.Callback exposing (Callback(..))
-import Message.Effects exposing (Effect(..), toHtmlID)
+import Message.Effects exposing (Effect(..))
 import Message.Message exposing (DomID(..), Message(..), PipelinesSection(..))
 import Message.Subscription
     exposing
@@ -46,7 +46,6 @@ import Message.Subscription
         , Interval(..)
         , Subscription(..)
         )
-import Message.TopLevelMessage exposing (TopLevelMessage(..))
 import Pipeline.PinMenu.PinMenu as PinMenu
 import Pipeline.Styles as Styles
 import RemoteData exposing (WebData)
@@ -283,7 +282,7 @@ handleCallback callback ( model, effects ) =
                 | editorSaving = False
                 , editorError = Nothing
                 , editorShouldUpdateTextFromFetch = False
-                                , editorSuccessToastSeconds = 3
+                , editorSuccessToastSeconds = 3
               }
             , effects
                 ++ [ FetchPipeline model.pipelineLocator
@@ -558,10 +557,8 @@ view session model =
                             [ Html.div
                                 (Styles.editButtonIcon
                                     ++ [ StrictEvents.onLeftClick <| Click TopBarEditPipeline
-                                       , onMouseEnter <| Hover <| Just TopBarEditPipeline
-                                       , onMouseLeave <| Hover Nothing
-                                       , id (toHtmlID TopBarEditPipeline)
                                        ]
+                                    ++ Tooltip.hoverAttrs TopBarEditPipeline
                                 )
                                 [ Icon.icon
                                     { sizePx = 20
@@ -933,15 +930,15 @@ sanitizeYamlIndentationLine line =
         indent =
             indentChars
                 |> List.reverse
-                |> List.foldl
-                    (\c acc ->
+                |> List.map
+                    (\c ->
                         if c == '\t' then
-                            acc ++ "  "
+                            "  "
 
                         else
-                            acc ++ " "
+                            " "
                     )
-                    ""
+                |> String.concat
     in
     indent ++ String.fromList restChars
 

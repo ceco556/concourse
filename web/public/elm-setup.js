@@ -3,90 +3,13 @@ import * as jsyaml from 'js-yaml';
 const renderingModulePromise = import('./index.mjs');
 const causalityModulePromise = import('./causality.mjs');
 
-function orderKeys(parentKey, keys) {
-  const prioritize = (wanted) => wanted.filter((k) => keys.includes(k));
-
-  if (parentKey === 'jobs') {
-    const ordered = [...prioritize(['name', 'plan'])];
-    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
-  }
-
-  if (
-    parentKey === 'plan' ||
-    parentKey === 'on_success' ||
-    parentKey === 'on_failure' ||
-    parentKey === 'on_abort' ||
-    parentKey === 'on_error' ||
-    parentKey === 'ensure'
-  ) {
-    const ordered = [
-      ...prioritize([
-        'task',
-        'get',
-        'put',
-        'set_pipeline',
-        'load_var',
-        'try',
-        'do',
-        'in_parallel',
-        'across',
-        'timeout',
-        'attempts',
-        'config',
-      ]),
-    ];
-    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
-  }
-
-  if (parentKey === 'config') {
-    const ordered = [...prioritize(['platform', 'image_resource', 'rootfs_uri', 'params', 'run'])];
-    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
-  }
-
-  if (parentKey === 'image_resource') {
-    const ordered = [...prioritize(['type', 'source', 'params', 'version', 'tag'])];
-    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
-  }
-
-  if (parentKey === 'run') {
-    const ordered = [...prioritize(['path', 'args', 'dir', 'user'])];
-    return ordered.concat(keys.filter((k) => !ordered.includes(k)));
-  }
-
-  return keys;
-}
-
-function shouldOmitKey(parentKey, key, value) {
-  if (parentKey === 'image_resource' && key === 'name' && value === '') return true;
-  return false;
-}
-
-function normalizeForYaml(value, parentKey) {
-  if (Array.isArray(value)) {
-    return value.map((v) => normalizeForYaml(v, parentKey));
-  }
-
-  if (value !== null && typeof value === 'object') {
-    const keys = orderKeys(parentKey, Object.keys(value)).filter(
-      (k) => !shouldOmitKey(parentKey, k, value[k])
-    );
-    const out = {};
-    for (const key of keys) {
-      out[key] = normalizeForYaml(value[key], key);
-    }
-    return out;
-  }
-
-  return value;
-}
-
 function postprocessYaml(yamlText) {
   return yamlText.replace(/(^\s*-\s+)["'](-[A-Za-z0-9_.-]+)["']\s*$/gm, '$1$2');
 }
 
 const node = document.getElementById("elm-app-embed");
 if (node === null) {
-  throw "missing #elm-app-embed";
+  throw new Error('missing #elm-app-embed');
 }
 
 const app = Elm.Main.init({
@@ -127,11 +50,10 @@ document.addEventListener('keydown', function(e) {
 app.ports.convertPipelineConfigToYaml.subscribe(function(configJson) {
   try {
     const obj = JSON.parse(configJson);
-    const normalized = normalizeForYaml(obj, null);
-    const dumped = jsyaml.dump(normalized, {
+    const dumped = jsyaml.dump(obj, {
       noRefs: true,
       lineWidth: -1,
-      sortKeys: false,
+      sortKeys: true,
       quotingType: '"',
     });
     const yamlText = postprocessYaml(dumped);
