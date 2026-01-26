@@ -53,7 +53,7 @@ app.ports.convertPipelineConfigToYaml.subscribe(function(configJson) {
     const dumped = jsyaml.dump(obj, {
       noRefs: true,
       lineWidth: -1,
-      sortKeys: true,
+         sortKeys: false,
       quotingType: '"',
     });
     const yamlText = postprocessYaml(dumped);

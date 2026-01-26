@@ -555,10 +555,10 @@ view session model =
                        , Html.div
                             Styles.editButton
                             [ Html.div
-                                (Styles.editButtonIcon
-                                    ++ [ StrictEvents.onLeftClick <| Click TopBarEditPipeline
-                                       ]
-                                    ++ Tooltip.hoverAttrs TopBarEditPipeline
+                                ((StrictEvents.onLeftClick <| Click TopBarEditPipeline)
+                                    :: (Styles.editButtonIcon
+                                            ++ Tooltip.hoverAttrs TopBarEditPipeline
+                                       )
                                 )
                                 [ Icon.icon
                                     { sizePx = 20
