@@ -73,6 +73,10 @@ type alias FooterModel r =
         , highDensity : Bool
         , dashboardView : Routes.DashboardView
         , query : String
+        , isCreatePipelineOpen : Bool
+        , createPipelineTeam : String
+        , createPipelineName : String
+        , createPipelineYaml : String
     }
 
 

@@ -11,6 +11,7 @@ module Dashboard.Dashboard exposing
     )
 
 import Application.Models exposing (Session)
+import Assets
 import Colors
 import Concourse exposing (hyphenNotation)
 import Concourse.BuildStatus
@@ -84,10 +85,11 @@ import Routes
 import ScreenSize exposing (ScreenSize(..))
 import Set
 import SideBar.SideBar as SideBar exposing (byDatabaseId, lookupPipeline)
-import StrictEvents exposing (onScroll)
+import StrictEvents exposing (onLeftClick, onScroll)
 import Time
 import Tooltip
 import UserState
+import Views.Icon as Icon
 import Views.Spinner as Spinner
 import Views.Styles
 import Views.Toggle as Toggle
@@ -109,6 +111,10 @@ init f =
       , highDensity = f.searchType == Routes.HighDensity
       , query = Routes.extractQuery f.searchType
       , dashboardView = f.dashboardView
+    , isCreatePipelineOpen = False
+    , createPipelineTeam = ""
+    , createPipelineName = ""
+    , createPipelineYaml = ""
       , pipelinesWithResourceErrors = Set.empty
       , jobs = None
       , pipelines = Nothing
@@ -681,6 +687,21 @@ update session msg =
 updateBody : Session -> Message -> ET Model
 updateBody session msg ( model, effects ) =
     case msg of
+        Click DashboardCreatePipeline ->
+            ( { model | isCreatePipelineOpen = True }, effects )
+
+        Click DashboardCreatePipelineClose ->
+            ( { model | isCreatePipelineOpen = False }, effects )
+
+        EditCreatePipelineName name ->
+            ( { model | createPipelineName = name }, effects )
+
+        EditCreatePipelineYaml yaml ->
+            ( { model | createPipelineYaml = yaml }, effects )
+
+        SelectCreatePipelineTeam teamName ->
+            ( { model | createPipelineTeam = teamName }, effects )
+
         DragStart card ->
             ( { model | dragState = Models.Dragging card }, effects )
 
@@ -869,9 +890,88 @@ view session model =
           <|
             [ SideBar.view session Nothing
             , dashboardView session model
+                        , createPipelinePanel model
             ]
         , Footer.view session model
         ]
+
+
+createPipelinePanel : Model -> Html Message
+createPipelinePanel model =
+    if model.isCreatePipelineOpen then
+        let
+            teams =
+                model.teams |> FetchResult.withDefault []
+
+            teamOptions =
+                Html.option
+                    [ Html.Attributes.value ""
+                    , Html.Attributes.disabled True
+                    , Html.Attributes.selected (model.createPipelineTeam == "")
+                    ]
+                    [ Html.text "Select team" ]
+                    :: List.map
+                        (\t ->
+                            Html.option
+                                [ Html.Attributes.value t.name
+                                , Html.Attributes.selected (t.name == model.createPipelineTeam)
+                                ]
+                                [ Html.text t.name ]
+                        )
+                        teams
+        in
+        Html.div
+            [ class "pipeline-editor" ]
+            [ Html.div [ class "pipeline-editor-header" ]
+                [ Html.h3 [ class "pipeline-editor-title" ] [ Html.text "Create pipeline" ]
+                , Html.div [ class "pipeline-editor-actions" ]
+                    [ Html.button
+                        ([ class "pipeline-editor-close"
+                         , onLeftClick <| Click DashboardCreatePipelineClose
+                         ]
+                            ++ Tooltip.hoverAttrs DashboardCreatePipelineClose
+                        )
+                        []
+                    ]
+                ]
+            , Html.div
+                [ style "padding" "10px"
+                , style "display" "flex"
+                , style "flex-direction" "column"
+                , style "gap" "10px"
+                , style "color" Colors.white
+                ]
+                [ Html.div []
+                    [ Html.div [ style "font-size" "12px", style "margin-bottom" "4px" ] [ Html.text "Team" ]
+                    , Html.select
+                        [ Html.Attributes.value model.createPipelineTeam
+                        , Html.Events.onInput SelectCreatePipelineTeam
+                        , style "width" "100%"
+                        ]
+                        teamOptions
+                    ]
+                , Html.div []
+                    [ Html.div [ style "font-size" "12px", style "margin-bottom" "4px" ] [ Html.text "Pipeline name" ]
+                    , Html.input
+                        [ Html.Attributes.value model.createPipelineName
+                        , Html.Attributes.placeholder "e.g. my-pipeline"
+                        , Html.Events.onInput EditCreatePipelineName
+                        , style "width" "100%"
+                        ]
+                        []
+                    ]
+                ]
+            , Html.textarea
+                [ class "pipeline-editor-textarea"
+                , Html.Attributes.value model.createPipelineYaml
+                , Html.Attributes.placeholder "pipeline YAML"
+                , Html.Events.onInput EditCreatePipelineYaml
+                ]
+                []
+            ]
+
+    else
+        Html.text ""
 
 
 tooltip : Session -> Maybe Tooltip.Tooltip
@@ -1094,12 +1194,14 @@ topBar session model =
                 else if not model.highDensity then
                     [ topBarContent [ SearchBar.view session model ]
                     , showArchivedToggleView model
+                    , createPipelineButton session model
                     , Login.view session.userState model
                     ]
 
                 else
                     [ topBarContent []
                     , showArchivedToggleView model
+                    , createPipelineButton session model
                     , Login.view session.userState model
                     ]
                )
@@ -1150,6 +1252,31 @@ showArchivedToggleView model =
             , on = on
             , styles = Styles.showArchivedToggle
             }
+
+
+createPipelineButton : Session -> Model -> Html Message
+createPipelineButton session model =
+    Html.div
+        ([ style "margin-right" "10px"
+         , style "display" "flex"
+         , style "align-items" "center"
+         , style "cursor" "pointer"
+         , onLeftClick <| Click DashboardCreatePipeline
+         ]
+            ++ Tooltip.hoverAttrs DashboardCreatePipeline
+        )
+        [ Icon.icon
+            { sizePx = 20
+            , image = Assets.PlusIcon
+            }
+            [ style "opacity" <|
+                if HoverState.isHovered DashboardCreatePipeline session.hovered || model.isCreatePipelineOpen then
+                    "1"
+
+                else
+                    "0.7"
+            ]
+        ]
 
 
 showTurbulence :

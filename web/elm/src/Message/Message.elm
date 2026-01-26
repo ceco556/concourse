@@ -28,6 +28,9 @@ type Message
     | DragStart Dashboard.Group.Models.Card
     | DragOver DropTarget
     | DragEnd
+    | EditCreatePipelineName String
+    | EditCreatePipelineYaml String
+    | SelectCreatePipelineTeam String
       -- Resource
     | EditComment String
     | FocusTextArea
@@ -88,6 +91,8 @@ type DomID
     | TopBarPipelineName Concourse.DatabaseID
     | TopBarPinIcon
     | TopBarEditPipeline
+    | DashboardCreatePipeline
+    | DashboardCreatePipelineClose
     | PipelineEditorClose
     | PipelineEditorSave
     | TopBarFavoritedIcon Concourse.DatabaseID

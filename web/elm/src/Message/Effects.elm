@@ -934,6 +934,12 @@ toHtmlID domId =
         SideBarIcon ->
             "sidebar-icon"
 
+        DashboardCreatePipeline ->
+            "dashboard-create-pipeline"
+
+        DashboardCreatePipelineClose ->
+            "dashboard-create-pipeline-close"
+
         Dashboard ->
             "dashboard"
 
