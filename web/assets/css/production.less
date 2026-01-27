@@ -402,6 +402,32 @@ li.prep-status {
   font-weight: 700;
 }
 
+.pipeline-editor-code {
+  display: flex;
+  flex-grow: 1;
+  min-height: 0;
+}
+
+.pipeline-editor-line-numbers {
+  flex: 0 0 48px;
+  min-width: 48px;
+  padding: 10px 0;
+  border-right: 1px solid @grey80;
+  background: @grey90;
+  color: @grey70;
+  text-align: right;
+  user-select: none;
+  overflow: hidden;
+}
+
+.pipeline-editor-line-numbers pre {
+  margin: 0;
+  padding: 0 10px;
+  font-family: 'Inconsolata', monospace;
+  font-size: 12px;
+  line-height: 16px;
+}
+
 .pipeline-editor-textarea {
   flex-grow: 1;
   min-height: 0;

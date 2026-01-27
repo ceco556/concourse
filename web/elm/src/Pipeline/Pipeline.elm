@@ -923,15 +923,35 @@ viewEditorPanel model =
 
             Nothing ->
                 Html.text ""
-        , Html.textarea
-            [ class "pipeline-editor-textarea"
-            , Html.Attributes.value model.editorText
-            , Html.Events.onInput EditPipelineYaml
-            , Html.Attributes.spellcheck False
-            , Html.Attributes.disabled model.editorLoading
+        , Html.div
+            [ class "pipeline-editor-code" ]
+            [ Html.div
+                [ class "pipeline-editor-line-numbers" ]
+                [ Html.pre [] [ Html.text (lineNumbersText model.editorText) ] ]
+            , Html.textarea
+                [ class "pipeline-editor-textarea"
+                , Html.Attributes.value model.editorText
+                , Html.Events.onInput EditPipelineYaml
+                , Html.Attributes.spellcheck False
+                , Html.Attributes.disabled model.editorLoading
+                ]
+                []
             ]
-            []
         ]
+
+
+lineNumbersText : String -> String
+lineNumbersText text =
+    let
+        lineCount =
+            text
+                |> String.lines
+                |> List.length
+                |> max 1
+    in
+    List.range 1 lineCount
+        |> List.map String.fromInt
+        |> String.join "\n"
 
 
 sanitizeYamlIndentation : String -> String

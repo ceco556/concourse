@@ -17,6 +17,57 @@ const app = Elm.Main.init({
   flags: window.elmFlags,
 });
 
+function syncPipelineEditorLineNumbers(textarea) {
+  const codeContainer = textarea.closest('.pipeline-editor-code');
+  if (!codeContainer) {
+    return;
+  }
+
+  const lineNumbersPre = codeContainer.querySelector('.pipeline-editor-line-numbers pre');
+  if (!lineNumbersPre) {
+    return;
+  }
+
+  const scrollTop = textarea.scrollTop || 0;
+  lineNumbersPre.style.transform = `translate3d(0, -${scrollTop}px, 0)`;
+}
+
+function bindPipelineEditorLineNumbers(textarea) {
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return;
+  }
+
+  if (!textarea.classList.contains('pipeline-editor-textarea')) {
+    return;
+  }
+
+  if (textarea.dataset.lineNumbersBound === 'true') {
+    return;
+  }
+  textarea.dataset.lineNumbersBound = 'true';
+
+  textarea.addEventListener(
+    'scroll',
+    () => syncPipelineEditorLineNumbers(textarea),
+    { passive: true }
+  );
+  textarea.addEventListener('input', () => syncPipelineEditorLineNumbers(textarea));
+
+  requestAnimationFrame(() => syncPipelineEditorLineNumbers(textarea));
+}
+
+document
+  .querySelectorAll('textarea.pipeline-editor-textarea')
+  .forEach(bindPipelineEditorLineNumbers);
+
+document.addEventListener(
+  'pointerdown',
+  (e) => bindPipelineEditorLineNumbers(e.target),
+  true
+);
+document.addEventListener('focusin', (e) => bindPipelineEditorLineNumbers(e.target), true);
+document.addEventListener('mouseover', (e) => bindPipelineEditorLineNumbers(e.target), true);
+
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Tab') {
     return;
@@ -53,7 +104,7 @@ app.ports.convertPipelineConfigToYaml.subscribe(function(configJson) {
     const dumped = jsyaml.dump(obj, {
       noRefs: true,
       lineWidth: -1,
-         sortKeys: false,
+      sortKeys: false,
       quotingType: '"',
     });
     const yamlText = postprocessYaml(dumped);
