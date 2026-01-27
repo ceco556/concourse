@@ -99,7 +99,6 @@ document.addEventListener(
       return;
     }
 
-    // Only the primary pointer; for mouse only accept left button.
     if (e.isPrimary === false) {
       return;
     }
@@ -120,11 +119,9 @@ document.addEventListener(
       pointerId: e.pointerId,
     };
 
-    try {
-      handle.setPointerCapture(e.pointerId);
-    } catch (_err) {
-      // ignore
-    }
+
+    handle.setPointerCapture(e.pointerId);
+
 
     document.documentElement.classList.add('pipeline-editor-resizing');
     e.preventDefault();
@@ -159,13 +156,9 @@ function stopPipelineEditorResize(e) {
   const { handle, pointerId } = pipelineEditorResize;
   pipelineEditorResize = null;
 
-  try {
-    const id = e && typeof e.pointerId === 'number' ? e.pointerId : pointerId;
-    if (typeof id === 'number') {
-      handle.releasePointerCapture(id);
-    }
-  } catch (_err) {
-    // ignore
+  const id = e && typeof e.pointerId === 'number' ? e.pointerId : pointerId;
+  if (typeof id === 'number') {
+    handle.releasePointerCapture(id);
   }
 
   document.documentElement.classList.remove('pipeline-editor-resizing');
