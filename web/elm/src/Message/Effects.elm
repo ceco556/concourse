@@ -104,6 +104,9 @@ port getHostname : () -> Cmd msg
 port convertPipelineConfigToYaml : String -> Cmd msg
 
 
+port convertPipelineConfigToJson : String -> Cmd msg
+
+
 type alias StickyHeaderConfig =
     { pageHeaderHeight : Float
     , pageBodyClass : String
@@ -186,6 +189,7 @@ type Effect
     | SendLogOutRequest
     | SavePipelineConfig Concourse.PipelineIdentifier Int String
     | ConvertPipelineConfigToYaml String
+    | ConvertPipelineConfigToJson String
     | GetScreenSize
     | PinTeamNames StickyHeaderConfig
     | Scroll ScrollDirection String
@@ -354,6 +358,9 @@ runEffect effect key csrfToken =
 
         ConvertPipelineConfigToYaml configJson ->
             convertPipelineConfigToYaml configJson
+
+        ConvertPipelineConfigToJson yamlText ->
+            convertPipelineConfigToJson yamlText
 
         FetchAllResources ->
             Api.get Endpoints.ResourcesList
@@ -810,6 +817,12 @@ pipelinesSectionName section =
 toHtmlID : DomID -> String
 toHtmlID domId =
     case domId of
+        PipelineEditorFormatYaml ->
+            "pipeline-editor-format-yaml"
+
+        PipelineEditorFormatJson ->
+            "pipeline-editor-format-json"
+
         SideBarTeam section t ->
             pipelinesSectionName section ++ "_" ++ Base64.encode t
 

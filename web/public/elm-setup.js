@@ -214,6 +214,17 @@ app.ports.convertPipelineConfigToYaml.subscribe(function(configJson) {
   }
 });
 
+app.ports.convertPipelineConfigToJson.subscribe(function(yamlText) {
+  try {
+    const obj = jsyaml.load(yamlText || '') ?? {};
+    const jsonText = JSON.stringify(obj, null, 2);
+    app.ports.pipelineConfigJsonConverted.send(jsonText);
+  } catch (err) {
+    console.error(err);
+    app.ports.pipelineConfigJsonConverted.send('');
+  }
+});
+
 var resizeTimer;
 
 app.ports.pinTeamNames.subscribe(function(config) {

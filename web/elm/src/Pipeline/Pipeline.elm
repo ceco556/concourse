@@ -35,6 +35,7 @@ import Html.Attributes
         )
 import Html.Events exposing (onMouseEnter, onMouseLeave)
 import Http
+import Json.Encode
 import Keyboard
 import Login.Login as Login
 import Message.Callback exposing (Callback(..))
@@ -64,6 +65,11 @@ import Views.Styles
 import Views.TopBar as TopBar
 
 
+type EditorFormat
+    = EditorYaml
+    | EditorJson
+
+
 type alias Model =
     Login.Model
         { turbulenceImgSrc : String
@@ -89,6 +95,8 @@ type alias Model =
         , editorConfigVersion : Maybe Int
         , editorShouldUpdateTextFromFetch : Bool
         , editorSuccessToastSeconds : Int
+        , editorFormat : EditorFormat
+        , editorSavePendingVersion : Maybe Int
         }
 
 type alias Flags =
@@ -125,6 +133,8 @@ init flags =
             , editorConfigVersion = Nothing
             , editorShouldUpdateTextFromFetch = True
             , editorSuccessToastSeconds = 0
+            , editorFormat = EditorYaml
+            , editorSavePendingVersion = Nothing
             }
     in
     ( model
@@ -242,14 +252,26 @@ handleCallback callback ( model, effects ) =
 
         PipelineConfigFetched (Ok payload) ->
             if model.editorShouldUpdateTextFromFetch then
-                ( { model
-                    | editorLoading = False
-                    , editorError = Nothing
-                    , editorConfigVersion = Just payload.version
-                  }
-                , effects
-                    ++ [ ConvertPipelineConfigToYaml <| Concourse.pipelineConfigToJsonString payload.config ]
-                )
+                case model.editorFormat of
+                    EditorYaml ->
+                        ( { model
+                            | editorLoading = False
+                            , editorError = Nothing
+                            , editorConfigVersion = Just payload.version
+                          }
+                        , effects
+                            ++ [ ConvertPipelineConfigToYaml <| Concourse.pipelineConfigToJsonString payload.config ]
+                        )
+
+                    EditorJson ->
+                        ( { model
+                            | editorLoading = False
+                            , editorError = Nothing
+                            , editorConfigVersion = Just payload.version
+                            , editorText = Json.Encode.encode 2 payload.config
+                          }
+                        , effects
+                        )
 
             else
                 ( { model
@@ -381,9 +403,37 @@ handleDelivery : Delivery -> ET Model
 handleDelivery delivery ( model, effects ) =
     case delivery of
         PipelineConfigYamlConverted yaml ->
-            ( { model | editorText = yaml, editorError = Nothing }
-            , effects
-            )
+            case ( model.editorFormat, model.editorSavePendingVersion ) of
+                ( EditorJson, Just pendingVersion ) ->
+                    if String.trim yaml == "" then
+                        ( { model
+                            | editorSaving = False
+                            , editorSavePendingVersion = Nothing
+                            , editorError = Just "failed to convert JSON to YAML"
+                          }
+                        , effects
+                        )
+
+                    else
+                        ( { model | editorSavePendingVersion = Nothing }
+                        , effects ++ [ SavePipelineConfig model.pipelineLocator pendingVersion (sanitizeYamlIndentation yaml) ]
+                        )
+
+                _ ->
+                    ( { model | editorText = yaml, editorError = Nothing }
+                    , effects
+                    )
+
+        PipelineConfigJsonConverted json ->
+            if String.trim json == "" then
+                ( { model | editorError = Just "failed to convert YAML to JSON" }
+                , effects
+                )
+
+            else
+                ( { model | editorText = json, editorError = Nothing }
+                , effects
+                )
 
         KeyDown keyEvent ->
             ( { model | hideLegend = False, hideLegendCounter = 0 }
@@ -447,7 +497,11 @@ update msg ( model, effects ) =
 
         Click TopBarEditPipeline ->
             if model.isEditorOpen then
-                ( { model | isEditorOpen = False, editorError = Nothing }
+                ( { model
+                    | isEditorOpen = False
+                    , editorError = Nothing
+                    , editorSavePendingVersion = Nothing
+                  }
                 , effects
                 )
 
@@ -459,12 +513,17 @@ update msg ( model, effects ) =
                     , editorWarnings = []
                     , editorConfigVersion = Nothing
                     , editorShouldUpdateTextFromFetch = True
+                                        , editorSavePendingVersion = Nothing
                   }
                 , effects ++ [ FetchPipelineConfig model.pipelineLocator ]
                 )
 
         Click PipelineEditorClose ->
-            ( { model | isEditorOpen = False, editorError = Nothing }
+            ( { model
+                | isEditorOpen = False
+                , editorError = Nothing
+                , editorSavePendingVersion = Nothing
+              }
             , effects
             )
 
@@ -480,9 +539,47 @@ update msg ( model, effects ) =
                         )
 
                     Just version ->
-                        ( { model | editorSaving = True, editorError = Nothing, editorWarnings = [] }
-                        , effects ++ [ SavePipelineConfig model.pipelineLocator version (sanitizeYamlIndentation model.editorText) ]
-                        )
+                        case model.editorFormat of
+                            EditorYaml ->
+                                ( { model | editorSaving = True, editorError = Nothing, editorWarnings = [] }
+                                , effects ++ [ SavePipelineConfig model.pipelineLocator version (sanitizeYamlIndentation model.editorText) ]
+                                )
+
+                            EditorJson ->
+                                ( { model
+                                    | editorSaving = True
+                                    , editorError = Nothing
+                                    , editorWarnings = []
+                                    , editorSavePendingVersion = Just version
+                                  }
+                                , effects ++ [ ConvertPipelineConfigToYaml model.editorText ]
+                                )
+
+        Click PipelineEditorFormatYaml ->
+            if model.editorLoading || model.editorSaving || model.editorFormat == EditorYaml then
+                ( model, effects )
+
+            else
+                ( { model
+                    | editorFormat = EditorYaml
+                    , editorError = Nothing
+                    , editorSavePendingVersion = Nothing
+                  }
+                , effects ++ [ ConvertPipelineConfigToYaml model.editorText ]
+                )
+
+        Click PipelineEditorFormatJson ->
+            if model.editorLoading || model.editorSaving || model.editorFormat == EditorJson then
+                ( model, effects )
+
+            else
+                ( { model
+                    | editorFormat = EditorJson
+                    , editorError = Nothing
+                    , editorSavePendingVersion = Nothing
+                  }
+                , effects ++ [ ConvertPipelineConfigToJson model.editorText ]
+                )
 
         EditPipelineYaml yaml ->
             ( { model | editorText = yaml }
@@ -519,6 +616,7 @@ subscriptions =
     , OnKeyDown
     , OnWindowResize
     , OnPipelineConfigYamlConverted
+    , OnPipelineConfigJsonConverted
     ]
 
 
@@ -878,7 +976,37 @@ viewEditorPanel model =
         [ Html.div [ class "pipeline-editor-resize-handle" ] []
         , Html.div
             [ class "pipeline-editor-header" ]
-            [ Html.h3 [ class "pipeline-editor-title" ] [ Html.text "Edit pipeline" ]
+            [ Html.div
+                [ class "pipeline-editor-header-left" ]
+                [ Html.div
+                    [ class "pipeline-editor-format-toggle-group" ]
+                    [ Html.button
+                        [ class <|
+                            if model.editorFormat == EditorYaml then
+                                "pipeline-editor-format-toggle is-active"
+
+                            else
+                                "pipeline-editor-format-toggle"
+                        , Html.Attributes.title "View as YAML"
+                        , Html.Attributes.attribute "aria-label" "View as YAML"
+                        , StrictEvents.onLeftClick <| Click PipelineEditorFormatYaml
+                        ]
+                        [ Html.text "YAML" ]
+                    , Html.button
+                        [ class <|
+                            if model.editorFormat == EditorJson then
+                                "pipeline-editor-format-toggle is-active"
+
+                            else
+                                "pipeline-editor-format-toggle"
+                        , Html.Attributes.title "View as JSON"
+                        , Html.Attributes.attribute "aria-label" "View as JSON"
+                        , StrictEvents.onLeftClick <| Click PipelineEditorFormatJson
+                        ]
+                        [ Html.text "JSON" ]
+                    ]
+                ]
+            , Html.h3 [ class "pipeline-editor-title" ] [ Html.text "Edit pipeline" ]
             , Html.div
                 [ class "pipeline-editor-actions" ]
                 [ Html.button

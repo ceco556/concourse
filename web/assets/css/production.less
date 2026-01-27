@@ -304,7 +304,7 @@ li.prep-status {
   position: relative;
   z-index: 1;
   width: 420px;
-  min-width: 320px;
+  min-width: 420px;
   max-width: 900px;
   display: flex;
   flex-direction: column;
@@ -343,9 +343,46 @@ html.pipeline-editor-resizing body {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 10px;
   border-bottom: 1px solid @grey80;
+}
+
+.pipeline-editor-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pipeline-editor-format-toggle-group {
+  display: inline-flex;
+  border: 1px solid @grey80;
+}
+
+.pipeline-editor-format-toggle {
+  background: transparent;
+  border: 0;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: @white;
+}
+
+.pipeline-editor-format-toggle:hover {
+  background: @grey80;
+}
+
+.pipeline-editor-format-toggle.is-active {
+  background: @grey80;
+  cursor: default;
+}
+
+.pipeline-editor-format-toggle + .pipeline-editor-format-toggle {
+  border-left: 1px solid @grey80;
 }
 
 .pipeline-editor-actions {
