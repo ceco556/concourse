@@ -68,6 +68,112 @@ document.addEventListener(
 document.addEventListener('focusin', (e) => bindPipelineEditorLineNumbers(e.target), true);
 document.addEventListener('mouseover', (e) => bindPipelineEditorLineNumbers(e.target), true);
 
+function parsePx(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.endsWith('px')) {
+    return null;
+  }
+  const n = parseFloat(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+let pipelineEditorResize = null;
+
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    const handle = e.target instanceof Element ? e.target.closest('.pipeline-editor-resize-handle') : null;
+    if (!handle) {
+      return;
+    }
+
+    const panel = handle.closest('.pipeline-editor');
+    if (!panel) {
+      return;
+    }
+
+    // Only the primary pointer; for mouse only accept left button.
+    if (e.isPrimary === false) {
+      return;
+    }
+
+    if (e.pointerType === 'mouse' && e.button !== 0) {
+      return;
+    }
+
+    const styles = window.getComputedStyle(panel);
+    const minWidth = parsePx(styles.minWidth) ?? 320;
+    const maxWidth = parsePx(styles.maxWidth) ?? 900;
+
+    pipelineEditorResize = {
+      handle,
+      panel,
+      minWidth,
+      maxWidth,
+      pointerId: e.pointerId,
+    };
+
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch (_err) {
+      // ignore
+    }
+
+    document.documentElement.classList.add('pipeline-editor-resizing');
+    e.preventDefault();
+  },
+  { capture: true, passive: false }
+);
+
+document.addEventListener(
+  'pointermove',
+  (e) => {
+    if (!pipelineEditorResize) {
+      return;
+    }
+
+    const { panel, minWidth, maxWidth } = pipelineEditorResize;
+    const rect = panel.getBoundingClientRect();
+    const right = rect.right;
+    const newWidth = clamp(right - e.clientX, minWidth, maxWidth);
+
+    panel.style.width = `${Math.round(newWidth)}px`;
+
+    e.preventDefault();
+  },
+  { capture: true, passive: false }
+);
+
+function stopPipelineEditorResize(e) {
+  if (!pipelineEditorResize) {
+    return;
+  }
+
+  const { handle, pointerId } = pipelineEditorResize;
+  pipelineEditorResize = null;
+
+  try {
+    const id = e && typeof e.pointerId === 'number' ? e.pointerId : pointerId;
+    if (typeof id === 'number') {
+      handle.releasePointerCapture(id);
+    }
+  } catch (_err) {
+    // ignore
+  }
+
+  document.documentElement.classList.remove('pipeline-editor-resizing');
+}
+
+document.addEventListener('pointerup', stopPipelineEditorResize, true);
+document.addEventListener('pointercancel', stopPipelineEditorResize, true);
+
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Tab') {
     return;

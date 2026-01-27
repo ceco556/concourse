@@ -875,7 +875,8 @@ viewEditorPanel : Model -> Html Message
 viewEditorPanel model =
     Html.div
         [ class "pipeline-editor" ]
-        [ Html.div
+        [ Html.div [ class "pipeline-editor-resize-handle" ] []
+        , Html.div
             [ class "pipeline-editor-header" ]
             [ Html.h3 [ class "pipeline-editor-title" ] [ Html.text "Edit pipeline" ]
             , Html.div

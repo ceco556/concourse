@@ -304,10 +304,39 @@ li.prep-status {
   position: relative;
   z-index: 1;
   width: 420px;
+  min-width: 320px;
+  max-width: 900px;
   display: flex;
   flex-direction: column;
   background: @grey90;
   border-left: 1px solid @grey80;
+  overflow: hidden;
+}
+
+html.pipeline-editor-resizing {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html.pipeline-editor-resizing body {
+  cursor: col-resize;
+}
+
+.pipeline-editor-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  cursor: col-resize;
+  z-index: 2;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pipeline-editor-resize-handle:hover {
+  background: @grey80;
 }
 
 .pipeline-editor-header {
