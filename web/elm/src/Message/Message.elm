@@ -95,6 +95,8 @@ type DomID
     | DashboardCreatePipelineClose
     | PipelineEditorClose
     | PipelineEditorSave
+    | PipelineEditorConfirmSet
+    | PipelineEditorCancelSet
     | PipelineEditorFormatYaml
     | PipelineEditorFormatJson
     | TopBarFavoritedIcon Concourse.DatabaseID

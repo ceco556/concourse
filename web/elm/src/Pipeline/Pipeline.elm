@@ -70,6 +70,12 @@ type EditorFormat
     | EditorJson
 
 
+type EditorReviewState
+    = ReviewClosed
+    | ReviewGenerating { version : Int, yaml : Maybe String }
+    | ReviewReady { version : Int, yaml : String, diff : String }
+
+
 type alias Model =
     Login.Model
         { turbulenceImgSrc : String
@@ -96,7 +102,10 @@ type alias Model =
         , editorShouldUpdateTextFromFetch : Bool
         , editorSuccessToastSeconds : Int
         , editorFormat : EditorFormat
-        , editorSavePendingVersion : Maybe Int
+        , editorReview : EditorReviewState
+        , editorOriginalYaml : Maybe String
+        , editorSetBaselineOnNextYamlConversion : Bool
+        , editorSubmittedYaml : Maybe String
         }
 
 type alias Flags =
@@ -134,7 +143,10 @@ init flags =
             , editorShouldUpdateTextFromFetch = True
             , editorSuccessToastSeconds = 0
             , editorFormat = EditorYaml
-            , editorSavePendingVersion = Nothing
+            , editorReview = ReviewClosed
+            , editorOriginalYaml = Nothing
+            , editorSetBaselineOnNextYamlConversion = False
+            , editorSubmittedYaml = Nothing
             }
     in
     ( model
@@ -258,6 +270,7 @@ handleCallback callback ( model, effects ) =
                             | editorLoading = False
                             , editorError = Nothing
                             , editorConfigVersion = Just payload.version
+                            , editorSetBaselineOnNextYamlConversion = True
                           }
                         , effects
                             ++ [ ConvertPipelineConfigToYaml <| Concourse.pipelineConfigToJsonString payload.config ]
@@ -306,9 +319,18 @@ handleCallback callback ( model, effects ) =
             ( { model
                 | editorSaving = False
                 , editorError = Nothing
-            , editorWarnings = warnings
+                , editorWarnings = warnings
                 , editorShouldUpdateTextFromFetch = False
                 , editorSuccessToastSeconds = 3
+                , editorReview = ReviewClosed
+                , editorOriginalYaml =
+                    case model.editorSubmittedYaml of
+                        Just submitted ->
+                            Just submitted
+
+                        Nothing ->
+                            model.editorOriginalYaml
+                , editorSubmittedYaml = Nothing
               }
             , effects
                 ++ [ FetchPipeline model.pipelineLocator
@@ -321,6 +343,8 @@ handleCallback callback ( model, effects ) =
                 | editorSaving = False
                 , editorSuccessToastSeconds = 0
                 , editorWarnings = []
+                , editorReview = ReviewClosed
+                , editorSubmittedYaml = Nothing
                 , editorError =
                     Just <|
                         case err of
@@ -403,24 +427,60 @@ handleDelivery : Delivery -> ET Model
 handleDelivery delivery ( model, effects ) =
     case delivery of
         PipelineConfigYamlConverted yaml ->
-            case ( model.editorFormat, model.editorSavePendingVersion ) of
-                ( EditorJson, Just pendingVersion ) ->
-                    if String.trim yaml == "" then
-                        ( { model
-                            | editorSaving = False
-                            , editorSavePendingVersion = Nothing
-                            , editorError = Just "failed to convert JSON to YAML"
-                          }
-                        , effects
-                        )
+            case model.editorReview of
+                ReviewGenerating review ->
+                    case review.yaml of
+                        Nothing ->
+                            if String.trim yaml == "" then
+                                ( { model
+                                    | editorReview = ReviewClosed
+                                    , editorError = Just "failed to convert JSON to YAML"
+                                  }
+                                , effects
+                                )
 
-                    else
-                        ( { model | editorSavePendingVersion = Nothing }
-                        , effects ++ [ SavePipelineConfig model.pipelineLocator pendingVersion (sanitizeYamlIndentation yaml) ]
-                        )
+                            else
+                                let
+                                    proposedYaml =
+                                        sanitizeYamlIndentation yaml
+
+                                    beforeYaml =
+                                        Maybe.withDefault "" model.editorOriginalYaml
+                                in
+                                ( { model
+                                    | editorReview = ReviewGenerating { version = review.version, yaml = Just proposedYaml }
+                                    , editorError = Nothing
+                                  }
+                                , effects
+                                    ++ [ ComputePipelineConfigDiff <|
+                                            Json.Encode.encode 0 <|
+                                                Json.Encode.object
+                                                    [ ( "before", Json.Encode.string beforeYaml )
+                                                    , ( "after", Json.Encode.string proposedYaml )
+                                                    ]
+                                       ]
+                                )
+
+                        Just _ ->
+                            ( { model
+                                | editorText = yaml
+                                , editorError = Nothing
+                              }
+                            , effects
+                            )
 
                 _ ->
-                    ( { model | editorText = yaml, editorError = Nothing }
+                    ( { model
+                        | editorText = yaml
+                        , editorError = Nothing
+                        , editorOriginalYaml =
+                            if model.editorSetBaselineOnNextYamlConversion then
+                                Just yaml
+
+                            else
+                                model.editorOriginalYaml
+                        , editorSetBaselineOnNextYamlConversion = False
+                      }
                     , effects
                     )
 
@@ -434,6 +494,33 @@ handleDelivery delivery ( model, effects ) =
                 ( { model | editorText = json, editorError = Nothing }
                 , effects
                 )
+
+        PipelineConfigDiffComputed diff ->
+            case model.editorReview of
+                ReviewGenerating review ->
+                    case review.yaml of
+                        Just proposedYaml ->
+                            if String.trim diff == "" then
+                                ( { model
+                                    | editorReview = ReviewClosed
+                                    , editorError = Just "failed to generate diff"
+                                  }
+                                , effects
+                                )
+
+                            else
+                                ( { model
+                                    | editorReview = ReviewReady { version = review.version, yaml = proposedYaml, diff = diff }
+                                    , editorError = Nothing
+                                  }
+                                , effects
+                                )
+
+                        Nothing ->
+                            ( model, effects )
+
+                _ ->
+                    ( model, effects )
 
         KeyDown keyEvent ->
             ( { model | hideLegend = False, hideLegendCounter = 0 }
@@ -500,7 +587,7 @@ update msg ( model, effects ) =
                 ( { model
                     | isEditorOpen = False
                     , editorError = Nothing
-                    , editorSavePendingVersion = Nothing
+                                        , editorReview = ReviewClosed
                   }
                 , effects
                 )
@@ -513,7 +600,10 @@ update msg ( model, effects ) =
                     , editorWarnings = []
                     , editorConfigVersion = Nothing
                     , editorShouldUpdateTextFromFetch = True
-                                        , editorSavePendingVersion = Nothing
+                                        , editorReview = ReviewClosed
+                                        , editorOriginalYaml = Nothing
+                                        , editorSetBaselineOnNextYamlConversion = False
+                                        , editorSubmittedYaml = Nothing
                   }
                 , effects ++ [ FetchPipelineConfig model.pipelineLocator ]
                 )
@@ -522,13 +612,14 @@ update msg ( model, effects ) =
             ( { model
                 | isEditorOpen = False
                 , editorError = Nothing
-                , editorSavePendingVersion = Nothing
+                                , editorReview = ReviewClosed
+                                , editorSubmittedYaml = Nothing
               }
             , effects
             )
 
         Click PipelineEditorSave ->
-            if model.editorSaving then
+            if model.editorSaving || model.editorLoading then
                 ( model, effects )
 
             else
@@ -539,21 +630,64 @@ update msg ( model, effects ) =
                         )
 
                     Just version ->
-                        case model.editorFormat of
-                            EditorYaml ->
-                                ( { model | editorSaving = True, editorError = Nothing, editorWarnings = [] }
-                                , effects ++ [ SavePipelineConfig model.pipelineLocator version (sanitizeYamlIndentation model.editorText) ]
-                                )
+                        case model.editorReview of
+                            ReviewClosed ->
+                                case model.editorFormat of
+                                    EditorYaml ->
+                                        let
+                                            proposedYaml =
+                                                sanitizeYamlIndentation model.editorText
 
-                            EditorJson ->
-                                ( { model
-                                    | editorSaving = True
-                                    , editorError = Nothing
-                                    , editorWarnings = []
-                                    , editorSavePendingVersion = Just version
-                                  }
-                                , effects ++ [ ConvertPipelineConfigToYaml model.editorText ]
-                                )
+                                            beforeYaml =
+                                                Maybe.withDefault "" model.editorOriginalYaml
+                                        in
+                                        ( { model
+                                            | editorError = Nothing
+                                            , editorWarnings = []
+                                            , editorReview = ReviewGenerating { version = version, yaml = Just proposedYaml }
+                                          }
+                                        , effects
+                                            ++ [ ComputePipelineConfigDiff <|
+                                                    Json.Encode.encode 0 <|
+                                                        Json.Encode.object
+                                                            [ ( "before", Json.Encode.string beforeYaml )
+                                                            , ( "after", Json.Encode.string proposedYaml )
+                                                            ]
+                                               ]
+                                        )
+
+                                    EditorJson ->
+                                        ( { model
+                                            | editorError = Nothing
+                                            , editorWarnings = []
+                                            , editorReview = ReviewGenerating { version = version, yaml = Nothing }
+                                          }
+                                        , effects ++ [ ConvertPipelineConfigToYaml model.editorText ]
+                                        )
+
+                            _ ->
+                                ( model, effects )
+
+        Click PipelineEditorConfirmSet ->
+            case model.editorReview of
+                ReviewReady { version, yaml } ->
+                    ( { model
+                        | editorSaving = True
+                        , editorError = Nothing
+                        , editorWarnings = []
+                        , editorReview = ReviewClosed
+                        , editorSubmittedYaml = Just yaml
+                      }
+                    , effects ++ [ SavePipelineConfig model.pipelineLocator version yaml ]
+                    )
+
+                _ ->
+                    ( model, effects )
+
+        Click PipelineEditorCancelSet ->
+            ( { model | editorReview = ReviewClosed }
+            , effects
+            )
 
         Click PipelineEditorFormatYaml ->
             if model.editorLoading || model.editorSaving || model.editorFormat == EditorYaml then
@@ -563,7 +697,7 @@ update msg ( model, effects ) =
                 ( { model
                     | editorFormat = EditorYaml
                     , editorError = Nothing
-                    , editorSavePendingVersion = Nothing
+                                        , editorReview = ReviewClosed
                   }
                 , effects ++ [ ConvertPipelineConfigToYaml model.editorText ]
                 )
@@ -576,7 +710,7 @@ update msg ( model, effects ) =
                 ( { model
                     | editorFormat = EditorJson
                     , editorError = Nothing
-                    , editorSavePendingVersion = Nothing
+                                        , editorReview = ReviewClosed
                   }
                 , effects ++ [ ConvertPipelineConfigToJson model.editorText ]
                 )
@@ -617,6 +751,7 @@ subscriptions =
     , OnWindowResize
     , OnPipelineConfigYamlConverted
     , OnPipelineConfigJsonConverted
+    , OnPipelineConfigDiffComputed
     ]
 
 
@@ -971,6 +1106,15 @@ viewSubPage session model =
 
 viewEditorPanel : Model -> Html Message
 viewEditorPanel model =
+    let
+        isReviewOpen review =
+            case review of
+                ReviewClosed ->
+                    False
+
+                _ ->
+                    True
+    in
     Html.div
         [ class "pipeline-editor" ]
         [ Html.div [ class "pipeline-editor-resize-handle" ] []
@@ -1014,7 +1158,7 @@ viewEditorPanel model =
                     , Html.Attributes.title "Set pipeline"
                     , Html.Attributes.attribute "aria-label" "Set pipeline"
                     , StrictEvents.onLeftClick <| Click PipelineEditorSave
-                    , Html.Attributes.disabled (model.editorLoading || model.editorSaving || model.editorConfigVersion == Nothing)
+                    , Html.Attributes.disabled (model.editorLoading || model.editorSaving || model.editorConfigVersion == Nothing || isReviewOpen model.editorReview)
                     ]
                     [ Html.div Styles.setPipelineIcon [] ]
                 , Html.button
@@ -1026,6 +1170,43 @@ viewEditorPanel model =
                     []
                 ]
             ]
+        , case model.editorReview of
+            ReviewClosed ->
+                Html.text ""
+
+            ReviewGenerating _ ->
+                Html.div
+                    [ class "pipeline-editor-review" ]
+                    [ Html.div [ class "pipeline-editor-review-title" ] [ Html.text "Generating diff…" ] ]
+
+            ReviewReady review ->
+                Html.div
+                    [ class "pipeline-editor-review" ]
+                    [ Html.div
+                        [ class "pipeline-editor-review-title" ]
+                        [ Html.text "Review changes, then confirm set pipeline." ]
+                    , Html.pre
+                        [ class "pipeline-editor-diff" ]
+                        [ Html.text review.diff ]
+                    , Html.div
+                        [ class "pipeline-editor-review-actions" ]
+                        [ Html.button
+                            [ class "pipeline-editor-review-cancel"
+                            , Html.Attributes.title "Cancel"
+                            , Html.Attributes.attribute "aria-label" "Cancel"
+                            , StrictEvents.onLeftClick <| Click PipelineEditorCancelSet
+                            ]
+                            [ Html.text "Cancel" ]
+                        , Html.button
+                            [ class "pipeline-editor-review-confirm"
+                            , Html.Attributes.title "Confirm set pipeline"
+                            , Html.Attributes.attribute "aria-label" "Confirm set pipeline"
+                            , StrictEvents.onLeftClick <| Click PipelineEditorConfirmSet
+                            , Html.Attributes.disabled (model.editorSaving || String.startsWith "(no changes" (String.trim review.diff))
+                            ]
+                            [ Html.text "Confirm" ]
+                        ]
+                    ]
         , if List.isEmpty model.editorWarnings then
             Html.text ""
 

@@ -225,6 +225,138 @@ app.ports.convertPipelineConfigToJson.subscribe(function(yamlText) {
   }
 });
 
+function splitLines(text) {
+  // Keep trailing empty line so diffs feel natural when text ends with \n.
+  return String(text ?? '').split('\n');
+}
+
+function myersDiff(aLines, bLines) {
+  const N = aLines.length;
+  const M = bLines.length;
+  const max = N + M;
+  /** @type {Array<Record<string, number>>} */
+  const trace = [];
+
+  /** @type {Record<string, number>} */
+  let v = { '1': 0 };
+
+  for (let d = 0; d <= max; d++) {
+    /** @type {Record<string, number>} */
+    const vNext = {};
+    for (let k = -d; k <= d; k += 2) {
+      const kMinus = String(k - 1);
+      const kPlus = String(k + 1);
+
+      let x;
+      if (k === -d || (k !== d && (v[kMinus] ?? -Infinity) < (v[kPlus] ?? -Infinity))) {
+        x = v[kPlus] ?? 0;
+      } else {
+        x = (v[kMinus] ?? 0) + 1;
+      }
+      let y = x - k;
+
+      while (x < N && y < M && aLines[x] === bLines[y]) {
+        x++;
+        y++;
+      }
+
+      vNext[String(k)] = x;
+
+      if (x >= N && y >= M) {
+        trace.push(vNext);
+        return { trace, aLines, bLines };
+      }
+    }
+    trace.push(vNext);
+    v = vNext;
+  }
+
+  return { trace, aLines, bLines };
+}
+
+function formatUnifiedLikeDiff(beforeText, afterText) {
+  const aLines = splitLines(beforeText);
+  const bLines = splitLines(afterText);
+
+  const { trace } = myersDiff(aLines, bLines);
+  if (!trace || trace.length === 0) {
+    return '';
+  }
+
+  let x = aLines.length;
+  let y = bLines.length;
+  /** @type {string[]} */
+  const out = [];
+
+  for (let d = trace.length - 1; d > 0; d--) {
+    const v = trace[d];
+    const vPrev = trace[d - 1];
+    const k = x - y;
+
+    let prevK;
+    const kMinus = String(k - 1);
+    const kPlus = String(k + 1);
+    if (k === -d || (k !== d && (vPrev[kMinus] ?? -Infinity) < (vPrev[kPlus] ?? -Infinity))) {
+      prevK = k + 1;
+    } else {
+      prevK = k - 1;
+    }
+
+    const prevX = vPrev[String(prevK)] ?? 0;
+    const prevY = prevX - prevK;
+
+    while (x > prevX && y > prevY) {
+      out.push(' ' + aLines[x - 1]);
+      x--;
+      y--;
+    }
+
+    if (x === prevX) {
+      out.push('+' + bLines[y - 1]);
+      y--;
+    } else {
+      out.push('-' + aLines[x - 1]);
+      x--;
+    }
+  }
+
+  while (x > 0 && y > 0) {
+    out.push(' ' + aLines[x - 1]);
+    x--;
+    y--;
+  }
+  while (x > 0) {
+    out.push('-' + aLines[x - 1]);
+    x--;
+  }
+  while (y > 0) {
+    out.push('+' + bLines[y - 1]);
+    y--;
+  }
+
+  out.reverse();
+
+  const hasChanges = out.some((l) => l.startsWith('+') || l.startsWith('-'));
+  if (!hasChanges) {
+    return '(no changes)';
+  }
+
+  return ['--- current', '+++ proposed', ...out].join('\n');
+}
+
+app.ports.computePipelineConfigDiff.subscribe(function(payloadJson) {
+  try {
+    const payload = JSON.parse(payloadJson || '{}');
+    const beforeText = payload && typeof payload.before === 'string' ? payload.before : '';
+    const afterText = payload && typeof payload.after === 'string' ? payload.after : '';
+    const diffText = formatUnifiedLikeDiff(beforeText, afterText);
+    app.ports.pipelineConfigDiffComputed.send(diffText);
+  } catch (err) {
+    console.error(err);
+    app.ports.pipelineConfigDiffComputed.send('');
+  }
+});
+
 var resizeTimer;
 
 app.ports.pinTeamNames.subscribe(function(config) {

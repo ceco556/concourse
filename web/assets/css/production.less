@@ -468,6 +468,59 @@ html.pipeline-editor-resizing body {
   font-weight: 700;
 }
 
+.pipeline-editor-review {
+  padding: 10px;
+  border-bottom: 1px solid @grey80;
+  color: @white;
+  font-size: 12px;
+}
+
+.pipeline-editor-review-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.pipeline-editor-diff {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid @grey80;
+  background: @grey100;
+  color: @white;
+  font-family: 'Inconsolata', monospace;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: pre;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.pipeline-editor-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pipeline-editor-review-actions button {
+  background: transparent;
+  border: 1px solid @grey80;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: @white;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pipeline-editor-review-actions button:hover {
+  background: @grey80;
+}
+
+.pipeline-editor-review-actions button:disabled {
+  background: transparent;
+  cursor: default;
+  opacity: 0.6;
+}
+
 .pipeline-editor-code {
   display: flex;
   flex-grow: 1;

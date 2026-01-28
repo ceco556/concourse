@@ -66,6 +66,9 @@ port pipelineConfigYamlConverted : (String -> msg) -> Sub msg
 port pipelineConfigJsonConverted : (String -> msg) -> Sub msg
 
 
+port pipelineConfigDiffComputed : (String -> msg) -> Sub msg
+
+
 type alias Position =
     { x : Float
     , y : Float
@@ -100,6 +103,7 @@ type Subscription
     | OnHostnameReceived
     | OnPipelineConfigYamlConverted
     | OnPipelineConfigJsonConverted
+    | OnPipelineConfigDiffComputed
 
 
 type Delivery
@@ -126,6 +130,7 @@ type Delivery
     | GotHostname String
     | PipelineConfigYamlConverted String
     | PipelineConfigJsonConverted String
+    | PipelineConfigDiffComputed String
     | Noop
 
 
@@ -213,6 +218,9 @@ runSubscription s =
 
         OnPipelineConfigJsonConverted ->
             pipelineConfigJsonConverted PipelineConfigJsonConverted
+
+        OnPipelineConfigDiffComputed ->
+            pipelineConfigDiffComputed PipelineConfigDiffComputed
 
 
 decodePosition : Json.Decode.Decoder Position
