@@ -4,7 +4,7 @@ import Assets
 import Concourse.PipelineStatus as PipelineStatus exposing (PipelineStatus(..))
 import Dashboard.Filter as Filter
 import Dashboard.Group.Models exposing (Pipeline)
-import Dashboard.Models exposing (Dropdown(..), FooterModel)
+import Dashboard.Models exposing (FooterModel)
 import Dashboard.Styles as Styles
 import Dict exposing (Dict)
 import HoverState
@@ -16,6 +16,7 @@ import Message.Message exposing (DomID(..), Message(..))
 import Message.Subscription exposing (Delivery(..), Interval(..))
 import Routes
 import ScreenSize
+import Views.SearchBar exposing (Dropdown(..))
 import Views.Icon as Icon
 import Views.Toggle as Toggle
 

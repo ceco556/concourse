@@ -34,7 +34,6 @@ import Dashboard.Models as Models
     exposing
         ( DragState(..)
         , DropState(..)
-        , Dropdown(..)
         , FetchError(..)
         , Model
         )
@@ -92,6 +91,7 @@ import Views.Spinner as Spinner
 import Views.Styles
 import Views.Toggle as Toggle
 import Views.TopBar as TopBar
+import Views.SearchBar exposing (Dropdown(..))
 
 
 type alias Flags =
